@@ -30,6 +30,7 @@ Revision History:
 #include <ntddmou.h>
 #include <ntdd8042.h>
 #include <wdf.h>
+#include"Ntstrsafe.h"
 //#include "Trace.h" // contains macros for WPP tracing
 
 #if DBG
@@ -46,6 +47,8 @@ Revision History:
 
 #endif
 
+#define typeCountPressButton int
+#define maxValue 255 
  
 typedef struct _DEVICE_EXTENSION
 {
@@ -65,7 +68,11 @@ typedef struct _DEVICE_EXTENSION
     //
     CONNECT_DATA UpperConnectData;
 
-    //HANDLE FileHandle;
+    UNICODE_STRING fileName;
+    typeCountPressButton count;
+    //char Button[6];
+    ANSI_STRING Button;
+    //TODO: добавить передачу с использованием буфура
 
   
 } DEVICE_EXTENSION, *PDEVICE_EXTENSION;
@@ -80,12 +87,14 @@ typedef struct _WORKITEM_CONTEXT
 
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_EXTENSION,
-                                        FilterGetData)//объ€вление типа области контекста
-    /*ћакросы дл€ объ€влени€ типа контекста ассоциируют тип с областью контекста и создают
+    FilterGetData)//объ€вление типа области контекста
+/*ћакросы дл€ объ€влени€ типа контекста ассоциируют тип с областью контекста и создают
 именованный метод доступа, который возвращает указатель на область контекста.
 ћакрос WDF_DECLARE_CONTEXT_TYPE_WITH_NAME назначает указанное драйвером им€ методу дос-
 тупа.*/
- 
+
+WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(WORKITEM_CONTEXT, GetWorkItemContext)
+
 //
 // Prototypes
 //

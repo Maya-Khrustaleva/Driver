@@ -14,7 +14,7 @@
 #pragma warning(disable:4055) // type case from PVOID to PSERVICE_CALLBACK_ROUTINE
 #pragma warning(disable:4152) // function/data pointer conversion in expression
 
-#define maxValue 4294967295 
+
 
 NTSTATUS
 DriverEntry (
@@ -200,7 +200,6 @@ Return Value:
     // Framework by default creates non-power managed queues for
     // filter drivers.
     //
-
     //ioQueueConfig.PowerManaged = FALSE;//не управляемая энергопотреблением очередь вводв/вывода
     ioQueueConfig.EvtIoInternalDeviceControl = MouFilter_EvtIoInternalDeviceControl;
     //ioQueueConfig.EvtIoRead = MouFiltr_EvtIoRead;
@@ -297,56 +296,20 @@ VOID Moufiltr_EvtWriteWorkItem(
     NTSTATUS          status = STATUS_SUCCESS;   
     HANDLE            fileHandle = NULL;//дескриптор объекта устройства, который будет посылать запросы ввода/вывода получателю
     IO_STATUS_BLOCK   iostatus;
-    UNICODE_STRING     fileName;
+    WDFDEVICE hDevice;
+    PDEVICE_EXTENSION devExt;
     OBJECT_ATTRIBUTES objectAttributes;
-    //UNICODE_STRING              absFileName, directory;
-   // PDEVICE_EXTENSION devExt;
-    //USHORT length = 0;
+    PWORKITEM_CONTEXT pItemContext;
 
-    //UNREFERENCED_PARAMETER(data);
-    
-    //_IRQL_limited_to_(PASSIVE_LEVEL);//либо вместо этих макросов использовать disable:28118
-    //PAGED_CODE();
-    
+    pItemContext = GetWorkItemContext(WorkItem);
+   
 
-    //devExt = FilterGetData(Device);
+    hDevice = pItemContext->Device;
+    devExt = FilterGetData(hDevice);
 
-    PAGED_CODE();
-    ASSERT(KeGetCurrentIrql() == PASSIVE_LEVEL);
-
-    RtlInitUnicodeString(&fileName, L"\\??\\C:\\Output\\test.txt");
-    
-    //fileName = WdfFileObjectGetFileName(FileObject);
-
-    //TraceEvents(TRACE_LEVEL_VERBOSE, DBG_INIT, "Moufiltr_EvtDeviceFileCreate %wZ%wZ",
-    //    &directory, fileName);
-
-
-    //
-    // Find the total length of the directory + filename
-    //
-    //length = directory.Length + fileName->Length;
-    
-    //ExAllocatePoolWithTag выделяет пул памяти указанного типа и возвращает указатель на выделенный блок.
-
-    /*Paged pool, which is pageable system memory. 
-    Paged pool can only be allocated and accessed at IRQL < DISPATCH_LEVEL.*/
-
-
-    /*Тег пула для использования в выделенной памяти. 
-    Укажите тег пула как ненулевой символьный литерал от одного до четырех символов, 
-    разделенных одинарными кавычками (например, «Tag1»). 
-    Строка обычно указывается в обратном порядке (например, «1gaT»). 
-    Каждый символ ASCII в теге должен иметь значение в диапазоне от 0x20 (пробел) до 0x7E (тильда).
-    Каждый путь кода выделения должен использовать уникальный тег пула, чтобы помочь отладчикам 
-    и верификаторам идентифицировать путь кода.*/
-
-    //ExAllocatePoolWithTag возвращает NULL, если в свободном пуле недостаточно памяти для удовлетворения запроса. 
-    //В противном случае процедура возвращает указатель на выделенную память.
-
-
+    RtlInitUnicodeString(&devExt->fileName, L"\\??\\C:\\Output\\test.txt");
     InitializeObjectAttributes(&objectAttributes,
-        &fileName,
+        &devExt->fileName,
         OBJ_KERNEL_HANDLE |     //указывает, что дескриптор может быть доступен только в режиме ядра
         OBJ_CASE_INSENSITIVE,  //сравнение имен без учета регистра
         //OBJ_EXCLUSIVE |         //только один дескриптор может быть открыт для данного объекта
@@ -374,42 +337,11 @@ VOID Moufiltr_EvtWriteWorkItem(
         NULL,
         0);
 
-    DebugPrint(("\nStatus is %x\n",status));
-    if (status == STATUS_OBJECT_NAME_COLLISION)
-    {
-        DebugPrint(("Hmmm"));
-    }
-
-    switch (iostatus.Information)
-    {
-    case FILE_CREATED:
-        DebugPrint(("FILE_CREATED\n"));
-        break;
-    case FILE_OPENED:
-        DebugPrint(("FILE_OPENED\n"));
-        break;
-    case FILE_OVERWRITTEN:
-        DebugPrint(("FILE_OVERWRITTEN\n"));
-        break;
-    case FILE_SUPERSEDED:
-        DebugPrint(("FILE_SUPERSEDED\n"));
-        break;
-    case FILE_EXISTS:
-        DebugPrint(("FILE_EXISTS\n"));
-        break;
-    case FILE_DOES_NOT_EXIST:
-        DebugPrint(("FILE_DOES_NOT_EXIST\n"));
-        break;
-    default:
-        DebugPrint(("unexpected status file %x\n", iostatus.Information));
-        break;
-    }
-
     if (NT_SUCCESS(status))
     {
         // Структура, которая поможет определить длину файла:
         FILE_STANDARD_INFORMATION fileInfo;
-        
+
         status =        // Получаем информацию о файле
             ZwQueryInformationFile(fileHandle,
                 &iostatus,
@@ -417,30 +349,55 @@ VOID Moufiltr_EvtWriteWorkItem(
                 sizeof(FILE_STANDARD_INFORMATION),
                 FileStandardInformation
             );
-        char cur[] = "test\n";
-        ULONG len = strlen(cur);
+        
+        //ULONG byteCount = sizeof(typeCountPressButton);
+        //DbgPrint("devExt->count: %d\n", devExt->count);
+        //DbgPrint("byteCount: %d\n", byteCount);
+
+        
         if (NT_SUCCESS(status))
         {
-            LARGE_INTEGER ByteOffset = fileInfo.EndOfFile;
-            
-            status = ZwWriteFile(fileHandle,
-                NULL,//null обязательно для intermediate drivers
-                NULL,//null обязательно для intermediate drivers
-                NULL,//null обязательно для intermediate drivers
-                &iostatus,
-                cur, len,   // Записываемый буфер и размер буфера в байтах
-                &ByteOffset,     // a если NULL? см. ниже
-                NULL);//null обязательно для intermediate drivers
-            //iostatus.Information при успешном завершении запроса на  передачу устанавливается
-            //число переданных байтов, иначе - 0
-            if (!NT_SUCCESS(status) || iostatus.Information != len)
+            char buffer[25];
+            status = RtlStringCbPrintfA(buffer, sizeof(buffer), "%s,count=%d\n", devExt->Button.Buffer, devExt->count);
+            if (NT_SUCCESS(status))
             {
-                DbgPrint("Error on writing. Status = %x.", status);
+                size_t byteCount;
+                status = RtlStringCbLengthA(buffer, sizeof(buffer), &byteCount);
+                if (NT_SUCCESS(status))
+                {
+                    LARGE_INTEGER ByteOffset = fileInfo.EndOfFile;
+
+                    status = ZwWriteFile(fileHandle,
+                        NULL,//null обязательно для intermediate drivers
+                        NULL,//null обязательно для intermediate drivers
+                        NULL,//null обязательно для intermediate drivers
+                        &iostatus,
+                        //&(devExt->count), 
+                        buffer,
+                        byteCount,   // Записываемый буфер и размер буфера в байтах
+                        &ByteOffset,     // a если NULL? см. ниже
+                        NULL);//null обязательно для intermediate drivers
+                    //iostatus.Information при успешном завершении запроса на  передачу устанавливается
+                    //число переданных байтов, иначе - 0
+                    if (!NT_SUCCESS(status) || iostatus.Information != byteCount)
+                    {
+                        DbgPrint("Error on writing. Status = %x", status);
+                    }
+                }
+                else 
+                {
+                    DbgPrint("Moufiltr_EvtWriteWorkItem: RtlStringCbLengthA failed with status %x", status);
+                }
+                
             }
-        }
-        ZwClose(fileHandle);
+            else { DbgPrint("Moufiltr_EvtWriteWorkItem: RtlStringCbPrintfA failed with status %x", status); }
+
+        }ZwClose(fileHandle);
     }
-    return status;
+
+    WdfObjectDelete(WorkItem);
+
+    return;
 
 }
 
@@ -622,101 +579,6 @@ Routine Description:
 }
 
 
-//#define MOUSE_HID_HARDWARE          0x0080
-//#define WHEELMOUSE_HID_HARDWARE     0x0100
-//#define HORIZONTAL_WHEEL_PRESENT    0x8000
-
-
-//BOOLEAN
-//MouFilter_IsrHook(
-//    PVOID         DeviceExtension, 
-//    PMOUSE_INPUT_DATA       CurrentInput, 
-//    POUTPUT_PACKET          CurrentOutput,
-//    UCHAR                   StatusByte,
-//    PUCHAR                  DataByte,
-//    PBOOLEAN                ContinueProcessing,
-//    PMOUSE_STATE            MouseState,
-//    PMOUSE_RESET_SUBSTATE   ResetSubState
-//)
-///*++
-//
-//Remarks:
-//    i8042prt specific code, if you are writing a packet only filter driver, you
-//    can remove this function
-//
-//Arguments:
-//
-//    DeviceExtension - Our context passed during IOCTL_INTERNAL_I8042_HOOK_MOUSE
-//    
-//    CurrentInput - Current input packet being formulated by processing all the
-//                    interrupts
-//
-//    CurrentOutput - Current list of bytes being written to the mouse or the
-//                    i8042 port.
-//                    
-//    StatusByte    - Byte read from I/O port 60 when the interrupt occurred                                            
-//    
-//    DataByte      - Byte read from I/O port 64 when the interrupt occurred. 
-//                    This value can be modified and i8042prt will use this value
-//                    if ContinueProcessing is TRUE
-//
-//    ContinueProcessing - If TRUE, i8042prt will proceed with normal processing of
-//                         the interrupt.  If FALSE, i8042prt will return from the
-//                         interrupt after this function returns.  Also, if FALSE,
-//                         it is this functions responsibilityt to report the input
-//                         packet via the function provided in the hook IOCTL or via
-//                         queueing a DPC within this driver and calling the
-//                         service callback function acquired from the connect IOCTL
-//                                             
-//Return Value:
-//
-//    Status is returned.
-//
-//  --+*/
-//{
-//    PDEVICE_EXTENSION   devExt;
-//    BOOLEAN             retVal = TRUE;
-//
-//    devExt = DeviceExtension;
-//    
-//    if (devExt->UpperIsrHook) {
-//        retVal = (*devExt->UpperIsrHook) (devExt->UpperContext,
-//                            CurrentInput,
-//                            CurrentOutput,
-//                            StatusByte,
-//                            DataByte,
-//                            ContinueProcessing,
-//                            MouseState,
-//                            ResetSubState
-//            );
-//
-//        if (!retVal || !(*ContinueProcessing)) {
-//            return retVal;
-//        }
-//    }
-//    //unsigned int leftButton = 0, rigthButton = 0;
-//
-//   
-//
-//    //if (CurrentInput->ButtonFlags & MOUSE_RIGHT_BUTTON_DOWN)
-//    //{
-//    //    //rigthButton++;
-//    //    (rigthButton == maxValue) ? rigthButton = 0 : rigthButton++;
-//    //    DebugPrint(("Rigth botton %i", rigthButton));
-//    //}
-//    //else if (CurrentInput->ButtonFlags & MOUSE_LEFT_BUTTON_DOWN)
-//    //{
-//    //    //leftButton++;
-//    //    (leftButton == maxValue) ? leftButton = 0: leftButton++;
-//    //    DebugPrint(("Left botton %i", leftButton));
-//    //}
-//    
-//
-//    *ContinueProcessing = TRUE;
-//    return retVal;
-//}
-
-    
 #pragma warning(disable:28118) // this callback will run at IRQL=PASSIVE_LEVEL
 VOID
 MouFilter_ServiceCallback(
@@ -758,56 +620,59 @@ Return Value:
     PDEVICE_EXTENSION   devExt;
     WDFDEVICE   hDevice;
     NTSTATUS status = STATUS_SUCCESS;
-    PWORKITEM_CONTEXT context;
-    WDF_OBJECT_ATTRIBUTES attributes;
-    WDF_WORKITEM_CONFIG workitemConfig;
-    WDFWORKITEM hWorkItem;
-
     
-
-
-
     hDevice = WdfWdmDeviceGetWdfDeviceHandle(DeviceObject);
-
     devExt = FilterGetData(hDevice);
-    static unsigned int leftButton = 0, rigthButton = 0;
-    if (InputDataStart->ButtonFlags & MOUSE_RIGHT_BUTTON_DOWN)
+
+    if ((InputDataStart->ButtonFlags & MOUSE_RIGHT_BUTTON_DOWN) || (InputDataStart->ButtonFlags & MOUSE_LEFT_BUTTON_DOWN))
     {
-        //rigthButton++;
-        (rigthButton == maxValue) ? rigthButton = 0 : rigthButton++;
-        DebugPrint(("\n\nRigth botton %u\n\n", rigthButton));
-        //const char* data = strcat("Rigth botton pressed, count= ", (char*)(rigthButton));
+        PWORKITEM_CONTEXT context;
+        WDF_OBJECT_ATTRIBUTES attributes;
+        WDF_WORKITEM_CONFIG workitemConfig;
+        WDFWORKITEM hWorkItem;
+        static typeCountPressButton leftButton = 0, rigthButton = 0;
+        typeCountPressButton current;
+        //char pressButton[6];
+        ANSI_STRING pressButton;
+        //TODO: добавить переопределение maxvalue
+
+        if (InputDataStart->ButtonFlags & MOUSE_RIGHT_BUTTON_DOWN)
+        {
+            (rigthButton == maxValue) ? rigthButton = 0 : rigthButton++;
+            DebugPrint(("\nRigth botton %i\n", rigthButton));
+            current = rigthButton;
+            //RtlInitUnicodeString(&pressButton, L"Right");
+            //(*pressButton) = "Right";
+            RtlInitAnsiString(&pressButton, "Right");
+        }
+        else
+        {
+            (leftButton == maxValue) ? leftButton = 0 : leftButton++;
+            DebugPrint(("\nLeft botton %i\n", leftButton));
+            current = leftButton;
+            //RtlInitUnicodeString(&pressButton, L"Left");
+            RtlInitAnsiString(&pressButton, "Left");
+        }
 
         WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
         WDF_OBJECT_ATTRIBUTES_SET_CONTEXT_TYPE(&attributes, WORKITEM_CONTEXT);
         attributes.ParentObject = hDevice;
-        WDF_WORKITEM_CONFIG_INIT(&workitemConfig, ReadWriteWorkItem);
+        WDF_WORKITEM_CONFIG_INIT(&workitemConfig, Moufiltr_EvtWriteWorkItem);
         status = WdfWorkItemCreate(&workitemConfig,
             &attributes,
             &hWorkItem);
         if (!NT_SUCCESS(status)) {
-            return status;
+            DebugPrint(("WdfWorkItemCreate failed with %x status", status));
         }
         context = GetWorkItemContext(hWorkItem);
         context->Device = hDevice;
+        devExt->count = current;
+        devExt->Button = pressButton;
+        DbgPrint("button is %s", pressButton.Buffer);
 
         WdfWorkItemEnqueue(hWorkItem);
-
-
-        status = MouFiltr_WriteToFile();
-        if (NT_SUCCESS(status))
-        {
-            DbgPrint("\nYEAAP\n");
-        }
-           
+        
     }
-    else if (InputDataStart->ButtonFlags & MOUSE_LEFT_BUTTON_DOWN)
-    {
-        //leftButton++;
-        (leftButton == maxValue) ? leftButton = 0 : leftButton++;
-        DebugPrint(("Left botton %i", leftButton));
-    }
-
     //
     // UpperConnectData must be called at DISPATCH
     //
@@ -816,20 +681,7 @@ Return Value:
         InputDataStart,
         InputDataEnd,
         InputDataConsumed
-        );
-    /*for (PMOUSE_INPUT_DATA curData = InputDataStart; curData < InputDataEnd; curData++)
-    {
-        DebugPrint(("curData"));
-        if (curData->ButtonFlags & MOUSE_RIGHT_BUTTON_DOWN)
-        {
-            DebugPrint(("Rigth button pressed"));
-            DebugPrint(("Content of curData: \n X - %d; \n Y - %d;", curData->LastX, curData->LastY));
-        }
-        else if (curData->ButtonFlags & MOUSE_LEFT_BUTTON_DOWN)
-            DebugPrint(("Left button pressed"));
-
-    }*/
-    
+        );    
 } 
 
 #pragma warning(pop)
