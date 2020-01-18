@@ -1,0 +1,8 @@
+/.vs/*
+/Debug/*
+/*.htm
+/README.md
+/Trace_test.h
+/*.rc
+/*.sln
+/*.vcxproj*
