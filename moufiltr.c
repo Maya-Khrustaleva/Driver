@@ -4,9 +4,9 @@
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (INIT, DriverEntry)
+//#pragma alloc_text (INIT, GetMaxValue)
 #pragma alloc_text (PAGE, MouFilter_EvtDeviceAdd)
 #pragma alloc_text (PAGE, MouFilter_EvtIoInternalDeviceControl)
-//#pragma alloc_text (PAGE, MouFiltr_EvtIoRead)
 #endif
 
 
@@ -14,7 +14,7 @@
 #pragma warning(disable:4055) // type case from PVOID to PSERVICE_CALLBACK_ROUTINE
 #pragma warning(disable:4152) // function/data pointer conversion in expression
 
-
+typeCountPressButton maxValue;
 
 NTSTATUS
 DriverEntry (
@@ -31,68 +31,48 @@ Routine Description:
 {
     WDF_DRIVER_CONFIG               config;
     NTSTATUS                        status;
-    
-    //***
-    //WDF_OBJECT_ATTRIBUTES          attributes;
-    //UNREFERENCED_PARAMETER(attributes);
 
     DebugPrint(("Mouse Filter Driver Sample - Driver Framework Edition.\n"));
     DebugPrint(("Built %s %s\n", __DATE__, __TIME__));
-    
-    // Initialize driver config to control the attributes that
-    // are global to the driver. Note that framework by default
-    // provides a driver unload routine. If you create any resources
-    // in the DriverEntry and want to be cleaned in driver unload,
-    // you can override that by manually setting the EvtDriverUnload in the
-    // config structure. In general xxx_CONFIG_INIT macros are provided to
-    // initialize most commonly used members.
 
     WDF_DRIVER_CONFIG_INIT(
         &config,
         MouFilter_EvtDeviceAdd
-    );/* Первым делом функция DriverEntry инициализирует структуру конфигурации объекта драй -
-        вера указателем на обратный вызов EvtDriverDeviceAdd драйвера. Для этого она вызывает
-        функцию WDF_DRIVER_CONFIG_INIT.*/
+    );
 
     //
     // Create a framework driver object to represent our driver.
     //
-
-    //***
-    //WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
-    //attributes.EvtCleanupCallback = MouFilterEvtDriverContextCleanup;
-    //attributes.ExecutionLevel=
-    
-    /*После инициализации структур конфигурации и атрибутов драйвер вызывает метод
-        WdfDriverCreate, чтобы создать инфраструктурный объект драйвера. Метод WdfDriverCreate
-        принимает следующие параметры:*/
     status = WdfDriverCreate(DriverObject,
                             RegistryPath,
                             WDF_NO_OBJECT_ATTRIBUTES, //при создании функции очистки - attributes
                             &config,
-                            WDF_NO_HANDLE); // hDriver optional
-                            /*адрес для дескриптора созданного объекта WDFDRIVER. Это необязательный параметр и
-                            может быть WDF_NO_HANDLE (определен как NULL), если драйвер не нуждается в этом деск-
-                            рипторе.
-                            Большинство драйверов не сохраняет дескриптор объекта драйвера, т. к. он редко используется,
-                            и драйвер всегда может получить его с помощью метода WdfGetDriver.*/
-    
+                            WDF_NO_HANDLE); 
 
     if (!NT_SUCCESS(status)) {
         DebugPrint( ("WdfDriverCreate failed with status 0x%x\n", status));
     }
-
-
-    
 
     //инициализация трассировки WPP
     //WPP_INIT_TRACINC(DriverObject, RegistryPath);
     //TraceEvents(TRACE_LEVEL_INFORMATION, DBC_INIT,
     //   "MouFiltr Driver Sample — Driver Framework Edition.\n")
 
+
+    GetMaxValue(&maxValue);
+
     return status; 
 
    
+}
+
+VOID GetMaxValue(typeCountPressButton* maxVal)
+{
+    (*maxVal) = 0;
+    for (unsigned short i = 0; i < sizeof(typeCountPressButton) * 8; i++)
+    {
+        (*maxVal) += 2 ^ i;
+    }
 }
 
 NTSTATUS
@@ -129,8 +109,6 @@ Return Value:
     NTSTATUS                status;
     WDFDEVICE               hDevice;
     WDF_IO_QUEUE_CONFIG     ioQueueConfig;
-
-    //WDF_OBJECT_ATTRIBUTES queueArributes;
     
     UNREFERENCED_PARAMETER(Driver);
 
@@ -138,40 +116,12 @@ Return Value:
 
     DebugPrint(("Enter FilterEvtDeviceAdd \n"));
 
-    //
-    // Tell the framework that you are filter driver. Framework
-    // takes care of inherting all the device flags & characterstics
-    // from the lower device you are attaching to.
-    //
     WdfFdoInitSetFilter(DeviceInit);
-    
-    
-    
+ 
     WdfDeviceInitSetDeviceType(DeviceInit, FILE_DEVICE_MOUSE);
-
-
-    /*Устанавливает тип ввода/вывода.
-    Драйвер указывает тип ввода/вывода для запросов на чтение и запись — буферизирован-
-    ный, прямой или и непрямой, и небуферизированный. Устанавливается стандартный тип
-    WdfDeviceIoBuffered.*/
-    //WdfDeviceInitSetIoType(&DeviceInit, WdfDeviceIoBuffered);
 
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&deviceAttributes,
         DEVICE_EXTENSION);
-
-    /*Драйвер записывает тип области контекста в структуру атрибутов объекта с помощью мак-
-    роса WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE или макроса WDF_OBJECT_ ATTRIBUTES_SET_
-    CONTEXT_TYPE.
-    Макрос WDF_OBJECT_ATTRIBUTES_SET_CONTEXT_TYPE записывает информацию об области кон-
-    текста в ранее инициализированной структуре атрибутов, которую драйвер предоставляет
-    в дальнейшем при создании объекта.
-    Макрос WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE совмещает действия макросов WDF_OBJECT_
-    ATTRIBUTES_INIT и WDF_OBJECT_ATTRIBUTES_SET_CONTEXT_TYPE.
-    То есть, кроме информации о контексте, он инициализирует структуру атрибутов установ-
-    ками для других атрибутов.*/
-
-    //deviceAttributes.EvtCleanupCallback = MouFiltr_EvtDriverContextCleanup;
-
 
     //
     // Create a framework device object.  This call will in turn create
@@ -186,12 +136,7 @@ Return Value:
 
 
     //
-    // Configure the default queue to be Parallel. Do not use sequential queue
-    // if this driver is going to be filtering PS2 ports because it can lead to
-    // deadlock. The PS2 port driver sends a request to the top of the stack when it
-    // receives an ioctl request and waits for it to be completed. If you use a
-    // a sequential queue, this request will be stuck in the queue because of the 
-    // outstanding ioctl request sent earlier to the port driver.
+    // Configure the default queue to be Parallel. 
     //
     WDF_IO_QUEUE_CONFIG_INIT_DEFAULT_QUEUE(&ioQueueConfig,
                              WdfIoQueueDispatchParallel);
@@ -202,15 +147,9 @@ Return Value:
     //
     //ioQueueConfig.PowerManaged = FALSE;//не управляемая энергопотреблением очередь вводв/вывода
     ioQueueConfig.EvtIoInternalDeviceControl = MouFilter_EvtIoInternalDeviceControl;
-    //ioQueueConfig.EvtIoRead = MouFiltr_EvtIoRead;
-
-
-    //WDF_OBJECT_ATTRIBUTES_INIT(&queueArributes);
-    //queueArributes.ExecutionLevel = WdfExecutionLevelPassive;
-
+  
     status = WdfIoQueueCreate(hDevice,
                             &ioQueueConfig,
-                            //&queueArributes,
                             WDF_NO_OBJECT_ATTRIBUTES,
                             WDF_NO_HANDLE // pointer to default queue
                             );
@@ -222,79 +161,28 @@ Return Value:
     return status;
 }
 
-//VOID
-//MouFiltr_EvtIoRead(
-//    _In_
-//    WDFQUEUE Queue,
-//    _In_
-//    WDFREQUEST Request,
-//    _In_
-//    size_t Length)
-//{
-//    PDEVICE_EXTENSION devExt;
-//    WDFDEVICE hDevice;
-//    NTSTATUS status=STATUS_SUCCESS;
-//    CONNECT_DATA connectData;
-//    PMOUSE_INPUT_DATA pMouseData;
-//    PINTERNAL_I8042_HOOK_MOUSE hookMouse;
-//    size_t length;
-//
-//
-//    hDevice = WdfIoQueueGetDevice(Queue);
-//    devExt = FilterGetData(hDevice);
-//
-//    //#define IOCTL_INTERNAL_I8042_HOOK_MOUSE     CTL_CODE(FILE_DEVICE_MOUSE, 0x0FF0, METHOD_NEITHER, FILE_ANY_ACCESS)
-//
-//
-//    //у UpperConnectdata тип ConnectData
-//            status = WdfRequestRetrieveInputBuffer(Request,
-//                sizeof(INTERNAL_I8042_HOOK_MOUSE),
-//                hookMouse,
-//                &length);
-//
-//            if (!NT_SUCCESS(status))
-//            {
-//                DebugPrint(("MouFiltr_EvtIoRead, WdfRequestRetrieveInputBuffer failed %x\n", status));
-//            }
-//
-//
-//       
-//        status = STATUS_SUCCESS;
-//     
-//}
-
-
-//VOID
-//Moufiltr_EvtFileClose(
-//    IN WDFFILEOBJECT    FileObject
-//)
-//{
-//    PDEVICE_EXTENSION devExt;
-//
-//    PAGED_CODE();
-//
-//
-//    //TraceEvents(TRACE_LEVEL_VERBOSE, DBG_INIT, "Moufiltr_EvtFileClose\n");
-//
-//    devExt = ControlGetData(WdfFileObjectGetDevice(FileObject));
-//
-//    if (devExt->FileHandle) {
-//        //TraceEvents(TRACE_LEVEL_VERBOSE, DBG_INIT,
-//        //    "Closing File Handle %p", devExt->FileHandle);
-//        ZwClose(devExt->FileHandle);
-//    }
-//
-//    return;
-//}
-
-
 
 VOID Moufiltr_EvtWriteWorkItem(
     IN WDFWORKITEM WorkItem
 )
+/*++
+Routine Description:
+
+    Moufiltr_EvtWriteWorkItem is callback function for work item.
+    Moufiltr_EvtWriteWorkItem writes a statistics of mouse clicks to the file 
+
+    To transfer data to the EvtWorkItem callback function, 
+    driver must use the context area of the work item object.
+
+Arguments:
+
+    WorkItem - work item object
+
+
+--*/
 {
     NTSTATUS          status = STATUS_SUCCESS;   
-    HANDLE            fileHandle = NULL;//дескриптор объекта устройства, который будет посылать запросы ввода/вывода получателю
+    HANDLE            fileHandle = NULL;
     IO_STATUS_BLOCK   iostatus;
     WDFDEVICE hDevice;
     PDEVICE_EXTENSION devExt;
@@ -307,22 +195,13 @@ VOID Moufiltr_EvtWriteWorkItem(
     hDevice = pItemContext->Device;
     devExt = FilterGetData(hDevice);
 
-    RtlInitUnicodeString(&devExt->fileName, L"\\??\\C:\\Output\\test.txt");
+    RtlInitUnicodeString(&devExt->fileName, L"\\??\\C:\\Output\\output.txt");
     InitializeObjectAttributes(&objectAttributes,
         &devExt->fileName,
-        OBJ_KERNEL_HANDLE |     //указывает, что дескриптор может быть доступен только в режиме ядра
-        OBJ_CASE_INSENSITIVE,  //сравнение имен без учета регистра
-        //OBJ_EXCLUSIVE |         //только один дескриптор может быть открыт для данного объекта
-        //OBJ_OPENIF,             //если этот флаг указан в функции, которая создает объект и он уже существует,
-        //то он должен быть открыт, иначе функция возвращает NTSTATUS code of STATUS_OBJECT_NAME_COLLISION.
-        
-        NULL,       //Дескриптор каталога корневого объекта для пути, 
-                    //указанного в параметре ObjectName. 
-                    //Если ObjectName является полностью определенным именем объекта, 
-                    //RootDirectory имеет значение NULL.
-        NULL        //Определяет дескриптор безопасности для применения к объекту при его создании. 
-                    //Этот параметр не является обязательным. Драйверы могут указать NULL, 
-                    //чтобы принять безопасность объекта по умолчанию. 
+        OBJ_KERNEL_HANDLE |     //indicates that the descriptor can only be accessed in kernel mode
+        OBJ_CASE_INSENSITIVE,   //case insensitive name comparison
+        NULL,                   //RootDirectory is NULL, If ObjectName is the fully qualified name of the object
+        NULL                    //Drivers can specify NULL to accept object security by default.(optional parameter)
     );
       
     status = ZwCreateFile(&fileHandle,
@@ -339,60 +218,59 @@ VOID Moufiltr_EvtWriteWorkItem(
 
     if (NT_SUCCESS(status))
     {
-        // Структура, которая поможет определить длину файла:
         FILE_STANDARD_INFORMATION fileInfo;
 
-        status =        // Получаем информацию о файле
-            ZwQueryInformationFile(fileHandle,
-                &iostatus,
-                &fileInfo,
-                sizeof(FILE_STANDARD_INFORMATION),
-                FileStandardInformation
-            );
-        
-        //ULONG byteCount = sizeof(typeCountPressButton);
-        //DbgPrint("devExt->count: %d\n", devExt->count);
-        //DbgPrint("byteCount: %d\n", byteCount);
-
+        status = ZwQueryInformationFile(fileHandle,
+            &iostatus,
+            &fileInfo,
+            sizeof(FILE_STANDARD_INFORMATION),
+            FileStandardInformation);
         
         if (NT_SUCCESS(status))
         {
-            char buffer[25];
-            status = RtlStringCbPrintfA(buffer, sizeof(buffer), "%s,count=%d\n", devExt->Button.Buffer, devExt->count);
+            char buffer[20];// buffer for writing to file
+
+            status = RtlStringCbPrintfA(buffer, sizeof(buffer), "%s, count=%d\n", devExt->Button.Buffer, devExt->count);
             if (NT_SUCCESS(status))
             {
-                size_t byteCount;
+                size_t byteCount;// quantity of bytes to write to file
+
                 status = RtlStringCbLengthA(buffer, sizeof(buffer), &byteCount);
                 if (NT_SUCCESS(status))
                 {
                     LARGE_INTEGER ByteOffset = fileInfo.EndOfFile;
 
                     status = ZwWriteFile(fileHandle,
-                        NULL,//null обязательно для intermediate drivers
-                        NULL,//null обязательно для intermediate drivers
-                        NULL,//null обязательно для intermediate drivers
+                        NULL,//null necessarily for intermediate drivers
+                        NULL,//null necessarily for intermediate drivers
+                        NULL,//null necessarily for intermediate drivers
                         &iostatus,
-                        //&(devExt->count), 
                         buffer,
-                        byteCount,   // Записываемый буфер и размер буфера в байтах
-                        &ByteOffset,     // a если NULL? см. ниже
-                        NULL);//null обязательно для intermediate drivers
-                    //iostatus.Information при успешном завершении запроса на  передачу устанавливается
-                    //число переданных байтов, иначе - 0
+                        byteCount, 
+                        &ByteOffset, 
+                        NULL);//null necessarily for intermediate drivers
+
+                    //iostatus.Information if the transfer request succeeds, the number of bytes transferred is set
+                    //otherwise - 0
                     if (!NT_SUCCESS(status) || iostatus.Information != byteCount)
                     {
-                        DbgPrint("Error on writing. Status = %x", status);
+                        DbgPrint("Moufiltr_EvtWriteWorkItem: ZwWriteFile failed with status 0x%x\n", status);
                     }
                 }
                 else 
                 {
-                    DbgPrint("Moufiltr_EvtWriteWorkItem: RtlStringCbLengthA failed with status %x", status);
+                    DbgPrint("Moufiltr_EvtWriteWorkItem: RtlStringCbLengthA failed with status 0x%x\n", status);
                 }
                 
             }
-            else { DbgPrint("Moufiltr_EvtWriteWorkItem: RtlStringCbPrintfA failed with status %x", status); }
+            else 
+            { 
+                DbgPrint("Moufiltr_EvtWriteWorkItem: RtlStringCbPrintfA failed with status 0x%x\n", status); 
+            }
 
-        }ZwClose(fileHandle);
+        }
+        
+        ZwClose(fileHandle);
     }
 
     WdfObjectDelete(WorkItem);
@@ -414,7 +292,6 @@ Routine Description:
 
     Passes a request on to the lower driver.
 
-
 --*/
 {
     //
@@ -425,10 +302,6 @@ Routine Description:
     BOOLEAN ret;
     NTSTATUS status = STATUS_SUCCESS;
 
-    //
-    // We are not interested in post processing the IRP so 
-    // fire and forget.
-    //
     WDF_REQUEST_SEND_OPTIONS_INIT(&options,
                                   WDF_REQUEST_SEND_OPTION_SEND_AND_FORGET);
 
@@ -462,17 +335,7 @@ Routine Description:
         Store the old context and function pointer and replace it with our own.
         This makes life much simpler than intercepting IRPs sent by the RIT and
         modifying them on the way back up.
-                                      
-    IOCTL_INTERNAL_I8042_HOOK_MOUSE:
-        Add in the necessary function pointers and context values so that we can
-        alter how the ps/2 mouse is initialized.
-                                            
-    NOTE:  Handling IOCTL_INTERNAL_I8042_HOOK_MOUSE is *NOT* necessary if 
-           all you want to do is filter MOUSE_INPUT_DATAs.  You can remove
-           the handling code and all related device extension fields and 
-           functions to conserve space.
-                                         
-
+                                                                            
 --*/
 {
     
@@ -526,7 +389,7 @@ Routine Description:
              } CONNECT_DATA, * PCONNECT_DATA;*/
 
         if(!NT_SUCCESS(status)){
-            DebugPrint(("WdfRequestRetrieveInputBuffer failed %x\n", status));
+            DebugPrint(("WdfRequestRetrieveInputBuffer failed 0x%x\n", status));
             break;
         }
 
@@ -591,12 +454,7 @@ MouFilter_ServiceCallback(
 
 Routine Description:
 
-    Called when there are mouse packets to report to the RIT.  You can do 
-    anything you like to the packets.  For instance:
-    
-    o Drop a packet altogether
-    o Mutate the contents of a packet 
-    o Insert packets into the stream 
+    Called when there are mouse packets to report to the RIT.
                     
 Arguments:
 
@@ -632,46 +490,46 @@ Return Value:
         WDFWORKITEM hWorkItem;
         static typeCountPressButton leftButton = 0, rigthButton = 0;
         typeCountPressButton current;
-        //char pressButton[6];
         ANSI_STRING pressButton;
         //TODO: добавить переопределение maxvalue
 
         if (InputDataStart->ButtonFlags & MOUSE_RIGHT_BUTTON_DOWN)
         {
             (rigthButton == maxValue) ? rigthButton = 0 : rigthButton++;
-            DebugPrint(("\nRigth botton %i\n", rigthButton));
+            DebugPrint(("\nRigth botton pressed, count is %i\n", rigthButton));
             current = rigthButton;
-            //RtlInitUnicodeString(&pressButton, L"Right");
-            //(*pressButton) = "Right";
             RtlInitAnsiString(&pressButton, "Right");
         }
         else
         {
             (leftButton == maxValue) ? leftButton = 0 : leftButton++;
-            DebugPrint(("\nLeft botton %i\n", leftButton));
+            DebugPrint(("\nLeft botton pressed, count is %i\n", leftButton));
             current = leftButton;
-            //RtlInitUnicodeString(&pressButton, L"Left");
             RtlInitAnsiString(&pressButton, "Left");
         }
 
         WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
         WDF_OBJECT_ATTRIBUTES_SET_CONTEXT_TYPE(&attributes, WORKITEM_CONTEXT);
         attributes.ParentObject = hDevice;
+
         WDF_WORKITEM_CONFIG_INIT(&workitemConfig, Moufiltr_EvtWriteWorkItem);
+
         status = WdfWorkItemCreate(&workitemConfig,
             &attributes,
             &hWorkItem);
-        if (!NT_SUCCESS(status)) {
-            DebugPrint(("WdfWorkItemCreate failed with %x status", status));
-        }
-        context = GetWorkItemContext(hWorkItem);
-        context->Device = hDevice;
-        devExt->count = current;
-        devExt->Button = pressButton;
-        DbgPrint("button is %s", pressButton.Buffer);
 
-        WdfWorkItemEnqueue(hWorkItem);
-        
+        if (!NT_SUCCESS(status)) {
+            DebugPrint(("WdfWorkItemCreate failed with 0x%x status\n", status));
+        }
+        else
+        {
+            context = GetWorkItemContext(hWorkItem);
+            context->Device = hDevice;
+            devExt->count = current;
+            devExt->Button = pressButton;
+
+            WdfWorkItemEnqueue(hWorkItem);
+        }
     }
     //
     // UpperConnectData must be called at DISPATCH

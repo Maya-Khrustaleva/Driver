@@ -35,7 +35,7 @@ Revision History:
 
 #if DBG
 
-#define TRAP()                      DbgBreakPoint()
+#define TRAP()          DbgBreakPoint()
 
 #define DebugPrint(_x_) DbgPrint _x_
 
@@ -48,12 +48,12 @@ Revision History:
 #endif
 
 #define typeCountPressButton int
-#define maxValue 255 
+
  
 typedef struct _DEVICE_EXTENSION
 {
  
-     //
+    //
     // Previous hook routine and context
     //                               
     PVOID UpperContext;
@@ -69,10 +69,17 @@ typedef struct _DEVICE_EXTENSION
     CONNECT_DATA UpperConnectData;
 
     UNICODE_STRING fileName;
+
+    //
+    //Buttin counter
+    //
     typeCountPressButton count;
-    //char Button[6];
+
+    //
+    //The field contains information about which button is pressed
+    //
     ANSI_STRING Button;
-    //TODO: добавить передачу с использованием буфура
+    
 
   
 } DEVICE_EXTENSION, *PDEVICE_EXTENSION;
@@ -86,13 +93,7 @@ typedef struct _WORKITEM_CONTEXT
 
 
 
-WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_EXTENSION,
-    FilterGetData)//объявление типа области контекста
-/*Макросы для объявления типа контекста ассоциируют тип с областью контекста и создают
-именованный метод доступа, который возвращает указатель на область контекста.
-Макрос WDF_DECLARE_CONTEXT_TYPE_WITH_NAME назначает указанное драйвером имя методу дос-
-тупа.*/
-
+WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(DEVICE_EXTENSION, FilterGetData)
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(WORKITEM_CONTEXT, GetWorkItemContext)
 
 //
@@ -102,17 +103,15 @@ DRIVER_INITIALIZE DriverEntry;
 
 EVT_WDF_DRIVER_DEVICE_ADD MouFilter_EvtDeviceAdd;
 EVT_WDF_IO_QUEUE_IO_INTERNAL_DEVICE_CONTROL MouFilter_EvtIoInternalDeviceControl;
-//EVT_WDF_IO_QUEUE_IO_READ MouFiltr_EvtIoRead;
 EVT_WDF_WORKITEM Moufiltr_EvtWriteWorkItem;
+
+VOID GetMaxValue(typeCountPressButton*);
 
 VOID
 MouFilter_DispatchPassThrough(
      _In_ WDFREQUEST Request,
     _In_ WDFIOTARGET Target
     );
-
-//_IRQL_requires_max_(PASSIVE_LEVEL);
-//NTSTATUS MouFiltr_WriteToFile();
 
 VOID
 MouFilter_ServiceCallback(
