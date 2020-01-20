@@ -31,7 +31,7 @@ Revision History:
 #include <ntdd8042.h>
 #include <wdf.h>
 #include"Ntstrsafe.h"
-//#include "Trace.h" // contains macros for WPP tracing
+#include "Trace.h" // contains macros for WPP tracing
 
 #if DBG
 
@@ -51,18 +51,7 @@ Revision History:
 
  
 typedef struct _DEVICE_EXTENSION
-{
- 
-    //
-    // Previous hook routine and context
-    //                               
-    PVOID UpperContext;
-     
-    //
-    // Context for IsrWritePort, QueueMousePacket
-    //
-    IN PVOID CallContext;
-
+{     
     //
     // The real connect data that this driver reports to
     //
@@ -71,7 +60,7 @@ typedef struct _DEVICE_EXTENSION
     UNICODE_STRING fileName;
 
     //
-    //Buttin counter
+    //Button counter
     //
     typeCountPressButton count;
 
@@ -103,6 +92,7 @@ DRIVER_INITIALIZE DriverEntry;
 
 EVT_WDF_DRIVER_DEVICE_ADD MouFilter_EvtDeviceAdd;
 EVT_WDF_IO_QUEUE_IO_INTERNAL_DEVICE_CONTROL MouFilter_EvtIoInternalDeviceControl;
+EVT_WDF_OBJECT_CONTEXT_CLEANUP MouFiltr_EvtDriverContextCleanup;
 EVT_WDF_WORKITEM Moufiltr_EvtWriteWorkItem;
 
 VOID GetMaxValue(typeCountPressButton*);
@@ -120,6 +110,11 @@ MouFilter_ServiceCallback(
     IN PMOUSE_INPUT_DATA InputDataEnd,
     IN OUT PULONG InputDataConsumed
     );
+
+VOID
+MouFiltr_EvtDriverContextCleanup(
+    IN WDFOBJECT Driver
+);
 
 #endif  // MOUFILTER_H
 

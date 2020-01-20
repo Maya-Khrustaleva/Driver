@@ -1,12 +1,12 @@
 #include "moufiltr.h"
-
-//#include "moufiltr.tmh"
+#include <moufiltr.tmh>
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (INIT, DriverEntry)
 //#pragma alloc_text (INIT, GetMaxValue)
 #pragma alloc_text (PAGE, MouFilter_EvtDeviceAdd)
 #pragma alloc_text (PAGE, MouFilter_EvtIoInternalDeviceControl)
+#pragma alloc_text (PAGE, MouFiltr_EvtDriverContextCleanup)
 #endif
 
 
@@ -35,31 +35,37 @@ Routine Description:
     DebugPrint(("Mouse Filter Driver Sample - Driver Framework Edition.\n"));
     DebugPrint(("Built %s %s\n", __DATE__, __TIME__));
 
+    WPP_INIT_TRACING(DriverObject, RegistryPath);
+    TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DRIVER,
+        "MouFiltr Driver Sample Ч Driver Framework Edition.\n");
+
+    GetMaxValue(&maxValue);
+
     WDF_DRIVER_CONFIG_INIT(
         &config,
         MouFilter_EvtDeviceAdd
     );
 
+    WDF_OBJECT_ATTRIBUTES driverAttributes;
+    WDF_OBJECT_ATTRIBUTES_INIT(&driverAttributes);
+    driverAttributes.EvtCleanupCallback = MouFiltr_EvtDriverContextCleanup;
     //
     // Create a framework driver object to represent our driver.
     //
     status = WdfDriverCreate(DriverObject,
                             RegistryPath,
-                            WDF_NO_OBJECT_ATTRIBUTES, //при создании функции очистки - attributes
+                            &driverAttributes, 
                             &config,
                             WDF_NO_HANDLE); 
 
     if (!NT_SUCCESS(status)) {
         DebugPrint( ("WdfDriverCreate failed with status 0x%x\n", status));
+
+        TraceEvents(TRACE_LEVEL_ERROR, TRACE_ERROR,
+            "WdfDriverCreate failed with status Ox%X\n",
+            status);
+        WPP_CLEANUP(DriverObject);
     }
-
-    //инициализаци€ трассировки WPP
-    //WPP_INIT_TRACINC(DriverObject, RegistryPath);
-    //TraceEvents(TRACE_LEVEL_INFORMATION, DBC_INIT,
-    //   "MouFiltr Driver Sample Ч Driver Framework Edition.\n")
-
-
-    GetMaxValue(&maxValue);
 
     return status; 
 
@@ -442,6 +448,35 @@ Routine Description:
 }
 
 
+VOID
+MouFiltr_EvtDriverContextCleanup(
+    IN WDFOBJECT Driver
+)
+{
+    //
+    // EvtCleanupCallback for WDFDRIVER is always called at PASSIVE_LEVEL
+    //
+    _IRQL_limited_to_(PASSIVE_LEVEL);
+
+    PAGED_CODE();
+    //
+    // For the case when WPP is not being used.
+    //
+    UNREFERENCED_PARAMETER(Driver);
+
+    TraceEvents(TRACE_LEVEL_VERBOSE, TRACE_VERBOSE,
+        "Entered Moufiltr_EvtDriverContextCleanup\n");
+
+    DebugPrint(("Enter in MouFiltr_EvtDriverContextCleanup"));
+    //
+    // No need to free the controldevice object explicitly because it will
+    // be deleted when the Driver object is deleted due to the default parent
+    // child relationship between Driver and ControlDevice.
+    //
+    WPP_CLEANUP(WdfDriverWdmGetDriverObject((WDFDRIVER)Driver));
+
+}
+
 #pragma warning(disable:28118) // this callback will run at IRQL=PASSIVE_LEVEL
 VOID
 MouFilter_ServiceCallback(
@@ -545,22 +580,3 @@ Return Value:
 #pragma warning(pop)
 
 
-
-//VOID
-//MouFiltr_EvtDriverContextCleanup(
-//    IN WDFOBJECT Driver
-//)
-//{
-//    //TraceEvents(TRACE_LEVEL_VERBOSE, DBG_INIT,
-//    //   "Entered NonPnpEvtDriverContextCleanup\n");
-//
-//    PAGED_CODE();
-//    KbPrint(("Enter in MouFiltr_EvtDriverContextCleanup"));
-//    //
-//    // No need to free the controldevice object explicitly because it will
-//    // be deleted when the Driver object is deleted due to the default parent
-//    // child relationship between Driver and ControlDevice.
-//    //
-//    //WPP_CLEANUP(WdfDriverWdmGetDriverObject((WDFDRIVER)Driver));
-//
-//}
