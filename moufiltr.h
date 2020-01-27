@@ -28,10 +28,10 @@ Revision History:
 #include <ntddk.h>
 #include <kbdmou.h>
 #include <ntddmou.h>
-#include <ntdd8042.h>
+
 #include <wdf.h>
 #include"Ntstrsafe.h"
-#include "Trace.h" // contains macros for WPP tracing
+
 
 #if DBG
 
@@ -47,7 +47,7 @@ Revision History:
 
 #endif
 
-#define typeCountPressButton int
+#define typeCountPressButton unsigned short int
 
  
 typedef struct _DEVICE_EXTENSION
@@ -92,7 +92,6 @@ DRIVER_INITIALIZE DriverEntry;
 
 EVT_WDF_DRIVER_DEVICE_ADD MouFilter_EvtDeviceAdd;
 EVT_WDF_IO_QUEUE_IO_INTERNAL_DEVICE_CONTROL MouFilter_EvtIoInternalDeviceControl;
-EVT_WDF_OBJECT_CONTEXT_CLEANUP MouFiltr_EvtDriverContextCleanup;
 EVT_WDF_WORKITEM Moufiltr_EvtWriteWorkItem;
 
 VOID GetMaxValue(typeCountPressButton*);
@@ -110,11 +109,6 @@ MouFilter_ServiceCallback(
     IN PMOUSE_INPUT_DATA InputDataEnd,
     IN OUT PULONG InputDataConsumed
     );
-
-VOID
-MouFiltr_EvtDriverContextCleanup(
-    IN WDFOBJECT Driver
-);
 
 #endif  // MOUFILTER_H
 

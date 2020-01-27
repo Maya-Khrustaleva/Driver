@@ -2,14 +2,14 @@
 #include <evntrace.h>                      
 #define WPP_CONTROL_GUIDS \
     WPP_DEFINE_CONTROL_GUID( \
-        MoufiltrTraceGuid, (4D36E96F,E325,11CE,DFC1,08002BE10318), \
-        WPP_DEFINE_BIT(MYDRIVER_ALL_INFO) /* bit 0 = 0x00000001 */ \
-        WPP_DEFINE_BIT(TRACE_DRIVER) /* bit 1 = 0x00000002 */ \
-        WPP_DEFINE_BIT(TRACE_DEVICE) /* bit 2 = 0x00000004 */ \
-        WPP_DEFINE_BIT(TRACE_QUEUE) /* bit 3 = 0x00000008 */ \
-        WPP_DEFINE_BIT(TRACE_ERROR) \
-        WPP_DEFINE_BIT(TRACE_INFORMATION) \
-        WPP_DEFINE_BIT(TRACE_VERBOSE) \
+        MoufiltrTraceGuid, (4D36E96F,E325,11CE,BFC1,08002BE10318),   \
+        WPP_DEFINE_BIT(MYDRIVER_ALL_INFO)   /* bit 0 = 0x00000001 */ \
+        WPP_DEFINE_BIT(TRACE_DRIVER)        /* bit 1 = 0x00000002 */ \
+        WPP_DEFINE_BIT(TRACE_DEVICE)        /* bit 2 = 0x00000004 */ \
+        WPP_DEFINE_BIT(TRACE_QUEUE)         /* bit 3 = 0x00000008 */ \
+        WPP_DEFINE_BIT(TRACE_ERROR)         /* bit 4 = 0x00000010 */ \
+        WPP_DEFINE_BIT(TRACE_INFORMATION)   /* bit 5 = 0x00000020 */ \
+        WPP_DEFINE_BIT(TRACE_VERBOSE)       /* bit 6 = 0x00000040 */ \
         )
 
 /*FunctionName(Condition1, Condition2,..., "Message", MessageVariables...)
@@ -41,3 +41,4 @@
 //
 // end_wpp
 //
+

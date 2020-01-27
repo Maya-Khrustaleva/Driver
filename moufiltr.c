@@ -1,12 +1,10 @@
 #include "moufiltr.h"
-#include <moufiltr.tmh>
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (INIT, DriverEntry)
-//#pragma alloc_text (INIT, GetMaxValue)
+#pragma alloc_text (INIT, GetMaxValue)
 #pragma alloc_text (PAGE, MouFilter_EvtDeviceAdd)
 #pragma alloc_text (PAGE, MouFilter_EvtIoInternalDeviceControl)
-#pragma alloc_text (PAGE, MouFiltr_EvtDriverContextCleanup)
 #endif
 
 
@@ -35,10 +33,6 @@ Routine Description:
     DebugPrint(("Mouse Filter Driver Sample - Driver Framework Edition.\n"));
     DebugPrint(("Built %s %s\n", __DATE__, __TIME__));
 
-    WPP_INIT_TRACING(DriverObject, RegistryPath);
-    TraceEvents(TRACE_LEVEL_INFORMATION, TRACE_DRIVER,
-        "MouFiltr Driver Sample — Driver Framework Edition.\n");
-
     GetMaxValue(&maxValue);
 
     WDF_DRIVER_CONFIG_INIT(
@@ -46,25 +40,17 @@ Routine Description:
         MouFilter_EvtDeviceAdd
     );
 
-    WDF_OBJECT_ATTRIBUTES driverAttributes;
-    WDF_OBJECT_ATTRIBUTES_INIT(&driverAttributes);
-    driverAttributes.EvtCleanupCallback = MouFiltr_EvtDriverContextCleanup;
     //
     // Create a framework driver object to represent our driver.
     //
     status = WdfDriverCreate(DriverObject,
                             RegistryPath,
-                            &driverAttributes, 
+                            WDF_NO_OBJECT_ATTRIBUTES, 
                             &config,
                             WDF_NO_HANDLE); 
 
     if (!NT_SUCCESS(status)) {
         DebugPrint( ("WdfDriverCreate failed with status 0x%x\n", status));
-
-        TraceEvents(TRACE_LEVEL_ERROR, TRACE_ERROR,
-            "WdfDriverCreate failed with status Ox%X\n",
-            status);
-        WPP_CLEANUP(DriverObject);
     }
 
     return status; 
@@ -75,11 +61,12 @@ Routine Description:
 VOID GetMaxValue(typeCountPressButton* maxVal)
 {
     (*maxVal) = 0;
-    for (unsigned short i = 0; i < sizeof(typeCountPressButton) * 8; i++)
+    for (char i = 0; i < sizeof(typeCountPressButton) * 8; i++)
     {
-        (*maxVal) += 2 ^ i;
+        (*maxVal) += (typeCountPressButton)1 << i;
     }
 }
+
 
 NTSTATUS
 MouFilter_EvtDeviceAdd(
@@ -290,7 +277,7 @@ Arguments:
 
 VOID
 MouFilter_DispatchPassThrough(
-    _In_ WDFREQUEST Request,
+    _In_ WDFREQUEST  Request,
     _In_ WDFIOTARGET Target
     )
 /*++
@@ -305,8 +292,8 @@ Routine Description:
     //
  
     WDF_REQUEST_SEND_OPTIONS options;
-    BOOLEAN ret;
-    NTSTATUS status = STATUS_SUCCESS;
+    BOOLEAN                  ret;
+    NTSTATUS                 status = STATUS_SUCCESS;
 
     WDF_REQUEST_SEND_OPTIONS_INIT(&options,
                                   WDF_REQUEST_SEND_OPTION_SEND_AND_FORGET);
@@ -347,14 +334,14 @@ Routine Description:
     
     PDEVICE_EXTENSION           devExt;
     PCONNECT_DATA               connectData;
-    NTSTATUS                   status = STATUS_SUCCESS;
-    WDFDEVICE                 hDevice;
-    size_t                           length; 
+    NTSTATUS                    status = STATUS_SUCCESS;
+    WDFDEVICE                   hDevice;
+    size_t                      length; 
 
     UNREFERENCED_PARAMETER(OutputBufferLength);
     UNREFERENCED_PARAMETER(InputBufferLength);
 
-    PAGED_CODE();//макрос используется для выявления случаев входа в страничный код с недопустимо высокими приоритетами
+    PAGED_CODE();
 
     hDevice = WdfIoQueueGetDevice(Queue);
     devExt = FilterGetData(hDevice);
@@ -370,12 +357,6 @@ Routine Description:
         //
         if (devExt->UpperConnectData.ClassService != NULL) {
             status = STATUS_SHARING_VIOLATION;
-            //((NTSTATUS)0xC0000043L)
-            // MessageId: STATUS_SHARING_VIOLATION
-            //
-            // MessageText:
-            //
-            // A file cannot be opened because the share access flags are incompatible.
             break;
         }
         
@@ -386,13 +367,7 @@ Routine Description:
                             sizeof(CONNECT_DATA),
                             &connectData,
                             &length);
-            //
-            // Define the port connection data structure.
-            //
-            /*    typedef struct _CONNECT_DATA {
-                 IN PDEVICE_OBJECT ClassDeviceObject;
-                 IN PVOID ClassService;
-             } CONNECT_DATA, * PCONNECT_DATA;*/
+
 
         if(!NT_SUCCESS(status)){
             DebugPrint(("WdfRequestRetrieveInputBuffer failed 0x%x\n", status));
@@ -428,12 +403,6 @@ Routine Description:
 
         status = STATUS_NOT_IMPLEMENTED;
         break;
-    
-    //case IOCTL_INTERNAL_MOUSE_ENABLE:
-    //case IOCTL_INTERNAL_MOUSE_DISABLE:
-
-    //case IOCTL_MOUSE_QUERY_ATTRIBUTES:
-    //case IOCTL_MOUSE_INSERT_DATA:
 
     default:
         break;
@@ -448,42 +417,13 @@ Routine Description:
 }
 
 
-VOID
-MouFiltr_EvtDriverContextCleanup(
-    IN WDFOBJECT Driver
-)
-{
-    //
-    // EvtCleanupCallback for WDFDRIVER is always called at PASSIVE_LEVEL
-    //
-    _IRQL_limited_to_(PASSIVE_LEVEL);
-
-    PAGED_CODE();
-    //
-    // For the case when WPP is not being used.
-    //
-    UNREFERENCED_PARAMETER(Driver);
-
-    TraceEvents(TRACE_LEVEL_VERBOSE, TRACE_VERBOSE,
-        "Entered Moufiltr_EvtDriverContextCleanup\n");
-
-    DebugPrint(("Enter in MouFiltr_EvtDriverContextCleanup"));
-    //
-    // No need to free the controldevice object explicitly because it will
-    // be deleted when the Driver object is deleted due to the default parent
-    // child relationship between Driver and ControlDevice.
-    //
-    WPP_CLEANUP(WdfDriverWdmGetDriverObject((WDFDRIVER)Driver));
-
-}
-
 #pragma warning(disable:28118) // this callback will run at IRQL=PASSIVE_LEVEL
 VOID
 MouFilter_ServiceCallback(
-    IN PDEVICE_OBJECT DeviceObject,
+    IN PDEVICE_OBJECT    DeviceObject,
     IN PMOUSE_INPUT_DATA InputDataStart,
     IN PMOUSE_INPUT_DATA InputDataEnd,
-    IN OUT PULONG InputDataConsumed
+    IN OUT PULONG        InputDataConsumed
     )
 /*++
 
@@ -511,71 +451,76 @@ Return Value:
 --*/
 {
     PDEVICE_EXTENSION   devExt;
-    WDFDEVICE   hDevice;
-    NTSTATUS status = STATUS_SUCCESS;
-    
+    WDFDEVICE   	    hDevice;
+    NTSTATUS 		    status = STATUS_SUCCESS;
+
     hDevice = WdfWdmDeviceGetWdfDeviceHandle(DeviceObject);
     devExt = FilterGetData(hDevice);
 
-    if ((InputDataStart->ButtonFlags & MOUSE_RIGHT_BUTTON_DOWN) || (InputDataStart->ButtonFlags & MOUSE_LEFT_BUTTON_DOWN))
+    for (PMOUSE_INPUT_DATA pCur = InputDataStart; pCur != InputDataEnd; pCur++)
     {
-        PWORKITEM_CONTEXT context;
-        WDF_OBJECT_ATTRIBUTES attributes;
-        WDF_WORKITEM_CONFIG workitemConfig;
-        WDFWORKITEM hWorkItem;
-        static typeCountPressButton leftButton = 0, rigthButton = 0;
-        typeCountPressButton current;
-        ANSI_STRING pressButton;
-        //TODO: добавить переопределение maxvalue
-
-        if (InputDataStart->ButtonFlags & MOUSE_RIGHT_BUTTON_DOWN)
+        if ((pCur->ButtonFlags & MOUSE_RIGHT_BUTTON_DOWN) || (pCur->ButtonFlags & MOUSE_LEFT_BUTTON_DOWN))
         {
-            (rigthButton == maxValue) ? rigthButton = 0 : rigthButton++;
-            DebugPrint(("\nRigth botton pressed, count is %i\n", rigthButton));
-            current = rigthButton;
-            RtlInitAnsiString(&pressButton, "Right");
+            PWORKITEM_CONTEXT           context;
+            WDF_OBJECT_ATTRIBUTES       attributes;
+            WDF_WORKITEM_CONFIG         workitemConfig;
+            WDFWORKITEM                 hWorkItem;
+            static typeCountPressButton leftButton = 0, rigthButton = 0;
+            typeCountPressButton        current;
+            ANSI_STRING                 pressButton;
+
+            if (pCur->ButtonFlags & MOUSE_RIGHT_BUTTON_DOWN)
+            {
+                (rigthButton == maxValue) ? rigthButton = 1 : rigthButton++;
+                DebugPrint(("\nRigth botton pressed, count is %i\n", rigthButton));
+                current = rigthButton;
+                RtlInitAnsiString(&pressButton, "Right");
+
+            }
+            else
+            {
+                (leftButton == maxValue) ? leftButton = 1 : leftButton++;
+                DebugPrint(("\nLeft botton pressed, count is %i\n", leftButton));
+                current = leftButton;
+                RtlInitAnsiString(&pressButton, "Left");
+            }
+
+            WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
+            WDF_OBJECT_ATTRIBUTES_SET_CONTEXT_TYPE(&attributes, WORKITEM_CONTEXT);
+            attributes.ParentObject = hDevice;
+
+            WDF_WORKITEM_CONFIG_INIT(&workitemConfig, Moufiltr_EvtWriteWorkItem);
+
+            status = WdfWorkItemCreate(&workitemConfig,
+                &attributes,
+                &hWorkItem);
+
+            if (!NT_SUCCESS(status)) {
+                DebugPrint(("WdfWorkItemCreate failed with 0x%x status\n", status));
+            }
+            else
+            {
+                context = GetWorkItemContext(hWorkItem);
+                context->Device = hDevice;
+                devExt->count = current;
+                devExt->Button = pressButton;
+
+                WdfWorkItemEnqueue(hWorkItem);
+            }
         }
-        else
-        {
-            (leftButton == maxValue) ? leftButton = 0 : leftButton++;
-            DebugPrint(("\nLeft botton pressed, count is %i\n", leftButton));
-            current = leftButton;
-            RtlInitAnsiString(&pressButton, "Left");
-        }
 
-        WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
-        WDF_OBJECT_ATTRIBUTES_SET_CONTEXT_TYPE(&attributes, WORKITEM_CONTEXT);
-        attributes.ParentObject = hDevice;
-
-        WDF_WORKITEM_CONFIG_INIT(&workitemConfig, Moufiltr_EvtWriteWorkItem);
-
-        status = WdfWorkItemCreate(&workitemConfig,
-            &attributes,
-            &hWorkItem);
-
-        if (!NT_SUCCESS(status)) {
-            DebugPrint(("WdfWorkItemCreate failed with 0x%x status\n", status));
-        }
-        else
-        {
-            context = GetWorkItemContext(hWorkItem);
-            context->Device = hDevice;
-            devExt->count = current;
-            devExt->Button = pressButton;
-
-            WdfWorkItemEnqueue(hWorkItem);
-        }
     }
     //
     // UpperConnectData must be called at DISPATCH
     //
-    (*(PSERVICE_CALLBACK_ROUTINE) devExt->UpperConnectData.ClassService)(
+    (*(PSERVICE_CALLBACK_ROUTINE)devExt->UpperConnectData.ClassService)(
         devExt->UpperConnectData.ClassDeviceObject,
         InputDataStart,
         InputDataEnd,
         InputDataConsumed
-        );    
-} 
+        );
+}
+
 
 #pragma warning(pop)
 
