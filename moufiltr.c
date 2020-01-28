@@ -2,7 +2,6 @@
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (INIT, DriverEntry)
-#pragma alloc_text (INIT, GetMaxValue)
 #pragma alloc_text (PAGE, MouFilter_EvtDeviceAdd)
 #pragma alloc_text (PAGE, MouFilter_EvtIoInternalDeviceControl)
 #endif
@@ -33,8 +32,6 @@ Routine Description:
     DebugPrint(("Mouse Filter Driver Sample - Driver Framework Edition.\n"));
     DebugPrint(("Built %s %s\n", __DATE__, __TIME__));
 
-    GetMaxValue(&maxValue);
-
     WDF_DRIVER_CONFIG_INIT(
         &config,
         MouFilter_EvtDeviceAdd
@@ -52,6 +49,8 @@ Routine Description:
     if (!NT_SUCCESS(status)) {
         DebugPrint( ("WdfDriverCreate failed with status 0x%x\n", status));
     }
+
+    GetMaxValue(&maxValue);
 
     return status; 
 
@@ -102,7 +101,7 @@ Return Value:
     NTSTATUS                status;
     WDFDEVICE               hDevice;
     WDF_IO_QUEUE_CONFIG     ioQueueConfig;
-    
+
     UNREFERENCED_PARAMETER(Driver);
 
     PAGED_CODE();
@@ -174,16 +173,16 @@ Arguments:
 
 --*/
 {
-    NTSTATUS          status = STATUS_SUCCESS;   
+    NTSTATUS          status = STATUS_SUCCESS;
     HANDLE            fileHandle = NULL;
     IO_STATUS_BLOCK   iostatus;
-    WDFDEVICE hDevice;
+    WDFDEVICE 	      hDevice;
     PDEVICE_EXTENSION devExt;
     OBJECT_ATTRIBUTES objectAttributes;
     PWORKITEM_CONTEXT pItemContext;
 
     pItemContext = GetWorkItemContext(WorkItem);
-   
+
 
     hDevice = pItemContext->Device;
     devExt = FilterGetData(hDevice);
@@ -191,12 +190,12 @@ Arguments:
     RtlInitUnicodeString(&devExt->fileName, L"\\??\\C:\\Output\\output.txt");
     InitializeObjectAttributes(&objectAttributes,
         &devExt->fileName,
-        OBJ_KERNEL_HANDLE |     //indicates that the descriptor can only be accessed in kernel mode
+        OBJ_KERNEL_HANDLE |     //indicates that the descriptor can only be accessed kernel mode
         OBJ_CASE_INSENSITIVE,   //case insensitive name comparison
-        NULL,                   //RootDirectory is NULL, If ObjectName is the fully qualified name of the object
-        NULL                    //Drivers can specify NULL to accept object security by default.(optional parameter)
+        NULL,                   //RootDirectory is NULL, If ObjectName is the qualified name of the object
+        NULL                    //Drivers can specify NULL to accept object security default.(optional parameter)
     );
-      
+
     status = ZwCreateFile(&fileHandle,
         SYNCHRONIZE | GENERIC_WRITE,
         &objectAttributes,
@@ -218,12 +217,30 @@ Arguments:
             &fileInfo,
             sizeof(FILE_STANDARD_INFORMATION),
             FileStandardInformation);
-        
+
         if (NT_SUCCESS(status))
         {
-            char buffer[20];// buffer for writing to file
+            char buffer[70];// buffer for writing to file
+            //LARGE_INTEGER systemTime;
+            //LARGE_INTEGER localTime;
+            //TIME_FIELDS timeFields;
 
-            status = RtlStringCbPrintfA(buffer, sizeof(buffer), "%s, count=%d\n", devExt->Button.Buffer, devExt->count);
+            //KeQuerySystemTime(&systemTime);
+            //ExSystemTimeToLocalTime(&systemTime, &localTime);
+
+            //RtlTimeToTimeFields(&localTime, &timeFields);
+
+
+            status = RtlStringCbPrintfA(buffer, sizeof(buffer), "Date: %d.%d.%d Time: %d:%d:%d %s, count=%d\n",
+                devExt->timeFields.Day,
+                devExt->timeFields.Month,
+                devExt->timeFields.Year,
+                devExt->timeFields.Hour,
+                devExt->timeFields.Minute,
+                devExt->timeFields.Second,
+                devExt->Button.Buffer,
+                devExt->count);
+
             if (NT_SUCCESS(status))
             {
                 size_t byteCount;// quantity of bytes to write to file
@@ -239,38 +256,36 @@ Arguments:
                         NULL,//null necessarily for intermediate drivers
                         &iostatus,
                         buffer,
-                        byteCount, 
-                        &ByteOffset, 
+                        byteCount,
+                        &ByteOffset,
                         NULL);//null necessarily for intermediate drivers
 
-                    //iostatus.Information if the transfer request succeeds, the number of bytes transferred is set
+                    //iostatus.Information if the transfer request succeeds,
+                    //the number of bytes transferred is set
                     //otherwise - 0
                     if (!NT_SUCCESS(status) || iostatus.Information != byteCount)
                     {
-                        DbgPrint("Moufiltr_EvtWriteWorkItem: ZwWriteFile failed with status 0x%x\n", status);
+                        DbgPrint("Moufiltr_EvtWriteWorkItem: ZwWriteFile failed with status 0x % x\n", status);
                     }
                 }
-                else 
+                else
                 {
-                    DbgPrint("Moufiltr_EvtWriteWorkItem: RtlStringCbLengthA failed with status 0x%x\n", status);
+                    DbgPrint("Moufiltr_EvtWriteWorkItem: RtlStringCbLengthA failed with status 0x % x\n", status);
                 }
-                
             }
-            else 
-            { 
-                DbgPrint("Moufiltr_EvtWriteWorkItem: RtlStringCbPrintfA failed with status 0x%x\n", status); 
+            else
+            {
+                DbgPrint("Moufiltr_EvtWriteWorkItem: RtlStringCbPrintfA failed with  status 0x % x\n", status); 
             }
-
         }
-        
         ZwClose(fileHandle);
     }
 
     WdfObjectDelete(WorkItem);
 
     return;
-
 }
+
 
 
 
@@ -466,24 +481,39 @@ Return Value:
             WDF_WORKITEM_CONFIG         workitemConfig;
             WDFWORKITEM                 hWorkItem;
             static typeCountPressButton leftButton = 0, rigthButton = 0;
-            typeCountPressButton        current;
-            ANSI_STRING                 pressButton;
+
+            LARGE_INTEGER               systemTime;
+            LARGE_INTEGER               localTime;
+            
 
             if (pCur->ButtonFlags & MOUSE_RIGHT_BUTTON_DOWN)
             {
                 (rigthButton == maxValue) ? rigthButton = 1 : rigthButton++;
                 DebugPrint(("\nRigth botton pressed, count is %i\n", rigthButton));
-                current = rigthButton;
-                RtlInitAnsiString(&pressButton, "Right");
+                devExt->count = rigthButton;
+                RtlInitAnsiString(&devExt->Button, "Right");
 
             }
             else
             {
                 (leftButton == maxValue) ? leftButton = 1 : leftButton++;
                 DebugPrint(("\nLeft botton pressed, count is %i\n", leftButton));
-                current = leftButton;
-                RtlInitAnsiString(&pressButton, "Left");
+                devExt->count = leftButton;
+                RtlInitAnsiString(&devExt->Button, "Left");
             }
+
+            KeQuerySystemTime(&systemTime);
+            ExSystemTimeToLocalTime(&systemTime, &localTime);
+
+            RtlTimeToTimeFields(&localTime, &devExt->timeFields);
+
+            DebugPrint(("Date: %d.%d.%d Time: %d:%d:%d\n",
+                devExt->timeFields.Day,
+                devExt->timeFields.Month,
+                devExt->timeFields.Year,
+                devExt->timeFields.Hour,
+                devExt->timeFields.Minute,
+                devExt->timeFields.Second));
 
             WDF_OBJECT_ATTRIBUTES_INIT(&attributes);
             WDF_OBJECT_ATTRIBUTES_SET_CONTEXT_TYPE(&attributes, WORKITEM_CONTEXT);
@@ -495,17 +525,15 @@ Return Value:
                 &attributes,
                 &hWorkItem);
 
-            if (!NT_SUCCESS(status)) {
-                DebugPrint(("WdfWorkItemCreate failed with 0x%x status\n", status));
+            if (NT_SUCCESS(status)) {
+                context = GetWorkItemContext(hWorkItem);
+                context->Device = hDevice;
+
+                WdfWorkItemEnqueue(hWorkItem);
             }
             else
             {
-                context = GetWorkItemContext(hWorkItem);
-                context->Device = hDevice;
-                devExt->count = current;
-                devExt->Button = pressButton;
-
-                WdfWorkItemEnqueue(hWorkItem);
+                DebugPrint(("WdfWorkItemCreate failed with 0x%x status\n", status));
             }
         }
 

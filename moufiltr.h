@@ -63,13 +63,16 @@ typedef struct _DEVICE_EXTENSION
     //Button counter
     //
     typeCountPressButton count;
+    
+    //
+    //The field contains time and date the button was pressed
+    //
+    TIME_FIELDS timeFields;
 
     //
     //The field contains information about which button is pressed
     //
     ANSI_STRING Button;
-    
-
   
 } DEVICE_EXTENSION, *PDEVICE_EXTENSION;
 
